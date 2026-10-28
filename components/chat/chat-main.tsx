@@ -6,6 +6,7 @@ import { ChatWelcomeScreen } from "./chat-welcome-screen";
 import { ChatConversationView } from "./chat-conversation-view";
 import { makeMessage, requestReply } from "@/lib/chat-client";
 import { useChatStore } from "@/store/chat-store";
+import type { MessageFeedback } from "@/mock-data/chats";
 
 export function ChatMain() {
   const router = useRouter();
@@ -23,6 +24,7 @@ export function ChatMain() {
   const addMessage = useChatStore((s) => s.addMessage);
   const setActive = useChatStore((s) => s.setActive);
   const removeMessage = useChatStore((s) => s.removeMessage);
+  const updateMessage = useChatStore((s) => s.updateMessage);
 
   const [message, setMessage] = useState("");
 
@@ -49,6 +51,39 @@ export function ChatMain() {
     if (!last?.isError) return;
     removeMessage(conversation.id, last.id);
     void requestReply(conversation.id);
+  };
+
+  // Thumbs up/down: saved on the message (so it persists) and recorded in the server log.
+  const sendFeedback = (messageId: string, feedback: MessageFeedback) => {
+    if (!conversation) return;
+    const index = conversation.messages.findIndex((m) => m.id === messageId);
+    const message = conversation.messages[index];
+    const question = conversation.messages
+      .slice(0, index)
+      .reverse()
+      .find((m) => m.sender === "user")?.content;
+    if (!message || !question) return;
+    updateMessage(conversation.id, messageId, { feedback });
+    // Skipping the "why?" question adds nothing new to log.
+    if (feedback.reasonSkipped) return;
+    fetch("/api/feedback", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        conversationId: conversation.id,
+        messageId,
+        question: question.slice(0, 1000),
+        rating: feedback.rating,
+        reason: feedback.reason,
+        grounded: message.grounded === true,
+        fallback: message.fallback === true,
+        cached: message.cached === true,
+        sources: (message.sources ?? []).map((source) => source.title),
+        timings: message.timings,
+      }),
+    }).catch(() => {
+      // Feedback logging is best effort; the vote is already saved on the message.
+    });
   };
 
   // An unknown conversation id goes back to a fresh chat.
@@ -82,6 +117,7 @@ export function ChatMain() {
         onSend={send}
         onReset={() => router.push("/")}
         onRetry={retry}
+        onFeedback={sendFeedback}
       />
     );
   }

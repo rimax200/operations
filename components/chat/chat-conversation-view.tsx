@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { XIcon, PaperclipIcon } from "lucide-react";
 import { ChatMessage, type Message } from "./chat-message";
+import type { MessageFeedback } from "@/mock-data/chats";
 import { Logo } from "@/components/ui/logo";
 
 interface ChatConversationViewProps {
@@ -12,6 +13,7 @@ interface ChatConversationViewProps {
   onSend: (content: string) => void;
   onReset: () => void;
   onRetry: () => void;
+  onFeedback: (messageId: string, feedback: MessageFeedback) => void;
 }
 
 export function ChatConversationView({
@@ -22,6 +24,7 @@ export function ChatConversationView({
   onSend,
   onReset,
   onRetry,
+  onFeedback,
 }: ChatConversationViewProps) {
   return (
     <div className="flex h-full flex-col">
@@ -43,6 +46,7 @@ export function ChatConversationView({
               message={msg}
               onSuggestionClick={(topic) => !isLoading && onSend(topic)}
               onRetry={index === messages.length - 1 && !isLoading ? onRetry : undefined}
+              onFeedback={(feedback) => onFeedback(msg.id, feedback)}
             />
           ))}
           {isLoading && (

@@ -1,5 +1,6 @@
 import { cacheKey, LruCache } from "@/lib/cache";
 import { callGroq } from "@/lib/groq";
+import { logEvent } from "@/lib/log";
 import { MANUAL_NAME, MANUAL_SHORT, ORG_NAME } from "@/lib/brand";
 import { buildQuery, closestTopics, popularTopics, search, type ScoredChunk } from "@/lib/retrieve";
 
@@ -48,22 +49,16 @@ interface ChatResponse {
   sources: { id: string; title: string; category: string }[];
   grounded: boolean;
   suggestions?: string[];
+  /** True when the manual had no answer (not for greetings). */
+  fallback?: boolean;
   cached?: boolean;
+  timings?: { retrievalMs: number | null; rewriteMs: number | null; llmMs: number | null };
 }
 
 // Only grounded answers and NOT_IN_MANUAL fallbacks are cached; errors never are.
 const answerCache = new LruCache<ChatResponse>();
 
-function busy(retryAfterSeconds: number) {
-  return Response.json(
-    {
-      error: "The assistant is busy right now. Please try again in a moment.",
-      busy: true,
-      retryAfterSeconds,
-    },
-    { status: 429 },
-  );
-}
+const BUSY_MESSAGE = "The assistant is busy right now. Please try again in a moment.";
 
 function parseMessages(body: unknown): ChatMessage[] | null {
   const messages = (body as { messages?: unknown })?.messages;
@@ -84,6 +79,7 @@ function notFound(query: string): ChatResponse {
       "I couldn't find that in the operations manual. These topics are the closest I have, so maybe one of them is what you need. If it's not covered, please check with your supervisor or the relevant department.",
     sources: [],
     grounded: false,
+    fallback: true,
     suggestions: closestTopics(query),
   };
 }
@@ -125,27 +121,60 @@ export async function POST(request: Request) {
   }
 
   const latest = messages[messages.length - 1].content;
+  const rawId = (body as { conversationId?: unknown }).conversationId;
+  const conversationId = typeof rawId === "string" && rawId.length <= 64 ? rawId : "unknown";
+
+  type Timings = NonNullable<ChatResponse["timings"]>;
+  const noTimings: Timings = { retrievalMs: null, rewriteMs: null, llmMs: null };
+
+  // Every request that reaches this point is logged, then answered.
+  const reply = (response: ChatResponse, timings: Timings = noTimings) => {
+    void logEvent({
+      type: "question",
+      conversationId,
+      question: latest,
+      grounded: response.grounded,
+      fallback: response.fallback === true,
+      sources: response.sources.map((source) => source.title),
+      cached: response.cached === true,
+      ...timings,
+    });
+    return Response.json({ ...response, timings });
+  };
+  const fail = (error: string, status: number, extra: object = {}, timings: Timings = noTimings) => {
+    void logEvent({
+      type: "question",
+      conversationId,
+      question: latest,
+      grounded: false,
+      fallback: false,
+      sources: [],
+      cached: false,
+      error: true,
+      ...timings,
+    });
+    return Response.json({ error, ...extra }, { status });
+  };
+  const busy = (retryAfterSeconds: number, timings?: Timings) =>
+    fail(BUSY_MESSAGE, 429, { busy: true, retryAfterSeconds }, timings);
 
   // 1. Greetings / thanks: instant reply, no LLM.
   if (SMALL_TALK.test(latest)) {
     console.log("[chat] small-talk, llm=skipped");
     const thanks = /thank|thx|bye/i.test(latest);
-    return Response.json({
+    return reply({
       answer: thanks
         ? `You're welcome! Ask me anything else from the ${MANUAL_SHORT}. Here are some things I can help with:`
         : `Hello! I'm here to help you find procedures in the ${MANUAL_SHORT} while you're serving a customer. You could try:`,
       sources: [],
       grounded: false,
       suggestions: popularTopics(),
-    } satisfies ChatResponse);
+    });
   }
 
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey || apiKey === "PASTE_KEY_HERE") {
-    return Response.json(
-      { error: "The assistant is not configured yet (missing GROQ_API_KEY)." },
-      { status: 500 },
-    );
+    return fail("The assistant is not configured yet (missing GROQ_API_KEY).", 500);
   }
 
   // 2. Normal retrieval.
@@ -159,7 +188,7 @@ export async function POST(request: Request) {
   const hit = answerCache.get(key);
   if (hit) {
     console.log(`[chat] cache hit retrieval=${retrievalMs}ms llm=skipped total=${Math.round(performance.now() - t0)}ms`);
-    return Response.json({ ...hit, cached: true } satisfies ChatResponse);
+    return reply({ ...hit, cached: true }, { retrievalMs, rewriteMs: null, llmMs: null });
   }
   console.log("[chat] cache miss");
 
@@ -186,7 +215,7 @@ export async function POST(request: Request) {
   };
   if (chunks.length === 0) {
     const rewrittenChunks = await rewriteQuery();
-    if (rewrittenChunks === "busy") return busy(30);
+    if (rewrittenChunks === "busy") return busy(30, { retrievalMs, rewriteMs, llmMs: null });
     chunks = rewrittenChunks;
   }
 
@@ -195,7 +224,7 @@ export async function POST(request: Request) {
     console.log(
       `[chat] retrieval=${retrievalMs}ms rewrite=${rewriteMs ?? "skipped"}ms llm=skipped (no chunk above MIN_SCORE) rewritten="${rewritten}"`,
     );
-    return Response.json(notFound(query));
+    return reply(notFound(query), { retrievalMs, rewriteMs, llmMs: null });
   }
 
   const answer = (found: ScoredChunk[]) => {
@@ -221,7 +250,7 @@ export async function POST(request: Request) {
   // excerpts don't answer it and we haven't rewritten yet, rewrite once and retry.
   if (llm.ok && llm.content.includes("NOT_IN_MANUAL") && rewriteMs === null) {
     const retry = await rewriteQuery();
-    if (retry === "busy") return busy(30);
+    if (retry === "busy") return busy(30, { retrievalMs, rewriteMs, llmMs });
     const known = new Set(chunks.map((c) => c.id));
     if (retry.some((c) => !known.has(c.id))) {
       chunks = retry;
@@ -234,23 +263,24 @@ export async function POST(request: Request) {
   );
   if (llm.ok && llm.usage) console.log(`[chat] tokens prompt=${llm.usage.promptTokens} completion=${llm.usage.completionTokens}`);
 
+  const timings: Timings = { retrievalMs, rewriteMs, llmMs };
+
   if (!llm.ok) {
-    if (llm.retryAfterSeconds !== undefined) return busy(llm.retryAfterSeconds);
-    const message = llm.timedOut
-      ? "The assistant took too long to respond. Please try again."
-      : "The assistant service had a problem. Please try again.";
-    return Response.json({ error: message }, { status: llm.timedOut ? 504 : 502 });
+    if (llm.retryAfterSeconds !== undefined) return busy(llm.retryAfterSeconds, timings);
+    return llm.timedOut
+      ? fail("The assistant took too long to respond. Please try again.", 504, {}, timings)
+      : fail("The assistant service had a problem. Please try again.", 502, {}, timings);
   }
 
   if (!llm.content || llm.content.includes("NOT_IN_MANUAL")) {
     const fallback = notFound(query);
     answerCache.set(key, fallback);
-    return Response.json(fallback);
+    return reply(fallback, timings);
   }
 
   const { answer: text, sources } = extractUsed(llm.content, chunks);
   console.log(`[chat] USED line: ${llm.content.match(/USED:.*$/im)?.[0] ?? "(missing)"}`);
   const response: ChatResponse = { answer: text, sources, grounded: true };
   answerCache.set(key, response);
-  return Response.json(response);
+  return reply(response, timings);
 }

@@ -1,6 +1,9 @@
-import { ZapIcon } from "lucide-react";
+import { ThumbsDownIcon, ThumbsUpIcon, ZapIcon } from "lucide-react";
 import { Markdown } from "@/components/markdown";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { FEEDBACK_REASONS } from "@/lib/feedback";
+import type { MessageFeedback } from "@/mock-data/chats";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/ui/logo";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -14,9 +17,75 @@ interface ChatMessageProps {
   onSuggestionClick?: (topic: string) => void;
   /** Set only on the latest message; shows "Try again" on a rate-limited error. */
   onRetry?: () => void;
+  onFeedback?: (feedback: MessageFeedback) => void;
 }
 
-export function ChatMessage({ message, onSuggestionClick, onRetry }: ChatMessageProps) {
+function FeedbackBar({
+  feedback,
+  onFeedback,
+}: {
+  feedback?: MessageFeedback;
+  onFeedback: (feedback: MessageFeedback) => void;
+}) {
+  const buttons = [
+    { rating: "up" as const, label: "Good answer", Icon: ThumbsUpIcon },
+    { rating: "down" as const, label: "Bad answer", Icon: ThumbsDownIcon },
+  ];
+  const askWhy = feedback?.rating === "down" && !feedback.reason && !feedback.reasonSkipped;
+  return (
+    <div className="mt-3 space-y-2">
+      <div className="flex items-center gap-1">
+        {buttons.map(({ rating, label, Icon }) => (
+          <Tooltip key={rating}>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={label}
+                  aria-pressed={feedback?.rating === rating}
+                  className={cn(
+                    "size-7",
+                    feedback?.rating === rating ? "bg-accent text-foreground" : "text-muted-foreground"
+                  )}
+                  onClick={() => feedback?.rating !== rating && onFeedback({ rating })}
+                >
+                  <Icon className="size-3.5" />
+                </Button>
+              }
+            />
+            <TooltipContent>{label}</TooltipContent>
+          </Tooltip>
+        ))}
+        {feedback?.reason && <span className="ml-1 text-xs text-muted-foreground">{feedback.reason}</span>}
+      </div>
+      {askWhy && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-xs text-muted-foreground">What went wrong?</span>
+          {FEEDBACK_REASONS.map((reason) => (
+            <button
+              key={reason}
+              type="button"
+              onClick={() => onFeedback({ rating: "down", reason })}
+              className="rounded-full border border-border bg-background px-2 py-0.5 text-xs text-foreground transition-colors hover:bg-accent"
+            >
+              {reason}
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => onFeedback({ rating: "down", reasonSkipped: true })}
+            className="rounded-full px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-accent"
+          >
+            Skip
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function ChatMessage({ message, onSuggestionClick, onRetry, onFeedback }: ChatMessageProps) {
   return (
     <div
       className={cn(
@@ -68,6 +137,9 @@ export function ChatMessage({ message, onSuggestionClick, onRetry }: ChatMessage
             <ZapIcon className="size-3" />
             Answered instantly
           </p>
+        )}
+        {onFeedback && !message.isError && (message.grounded === true || message.fallback === true) && (
+          <FeedbackBar feedback={message.feedback} onFeedback={onFeedback} />
         )}
         {message.isError && message.retryable && onRetry && (
           <Button variant="secondary" size="sm" className="mt-3" onClick={onRetry}>

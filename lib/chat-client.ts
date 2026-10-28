@@ -27,6 +27,7 @@ export async function requestReply(conversationId: string) {
         // Never wait forever: a stuck request would leave the loading bubble up.
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
         body: JSON.stringify({
+          conversationId,
           messages: conversation.messages
             .filter((m) => !m.isError)
             .slice(-CONTEXT_MESSAGES)
@@ -49,6 +50,8 @@ export async function requestReply(conversationId: string) {
           grounded: data.grounded,
           suggestions: data.suggestions,
           cached: data.cached === true,
+          fallback: data.fallback === true,
+          timings: data.timings,
         });
       }
     } catch (err) {
