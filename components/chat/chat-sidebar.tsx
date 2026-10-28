@@ -6,6 +6,7 @@ import {
   SearchIcon,
   SparklesIcon,
   FileStackIcon,
+  BarChart3Icon,
   PlusIcon,
   XIcon,
   MessageCircleDashedIcon,
@@ -39,6 +40,12 @@ const navItems = [
     label: "Manual Archive",
     icon: FileStackIcon,
     active: (path: string) => path.startsWith("/archive"),
+  },
+  {
+    href: "/insights",
+    label: "Insights",
+    icon: BarChart3Icon,
+    active: (path: string) => path.startsWith("/insights"),
   },
 ];
 
