@@ -42,7 +42,7 @@ export function ChatInputBox({
             </Button>
           </div>
 
-          <Button size="sm" onClick={onSend} className="h-7 px-4">
+          <Button size="sm" onClick={onSend} className="h-7 px-4 bg-[#203262] text-white hover:bg-[#203262]/90">
             Send
           </Button>
         </div>

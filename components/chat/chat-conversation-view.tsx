@@ -99,7 +99,7 @@ export function ChatConversationView({
                       onSend(message);
                     }
                   }}
-                  className="h-7 px-4"
+                  className="h-7 px-4 bg-[#203262] text-white hover:bg-[#203262]/90"
                 >
                   Send
                 </Button>
