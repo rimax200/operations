@@ -1,39 +1,19 @@
-import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/ui/logo";
-import { cn } from "@/lib/utils";
-import {
-  ZapIcon,
-  MessageCircleDashedIcon,
-  WandSparklesIcon,
-  BoxIcon,
-} from "lucide-react";
 import { ChatInputBox } from "./chat-input-box";
-
-const chatModes = [
-  { id: "fast", label: "Fast", icon: ZapIcon },
-  { id: "in-depth", label: "In-depth", icon: MessageCircleDashedIcon },
-  { id: "magic", label: "Magic AI", icon: WandSparklesIcon, pro: true },
-  { id: "holistic", label: "Holistic", icon: BoxIcon },
-];
+import { APP_NAME, STARTER_QUESTIONS, WELCOME_SUBTITLE, WELCOME_TITLE } from "@/lib/brand";
 
 interface ChatWelcomeScreenProps {
   message: string;
   onMessageChange: (value: string) => void;
   onSend: () => void;
-  selectedMode: string;
-  onModeChange: (modeId: string) => void;
-  selectedModel: string;
-  onModelChange: (modelId: string) => void;
+  onStarterClick: (question: string) => void;
 }
 
 export function ChatWelcomeScreen({
   message,
   onMessageChange,
   onSend,
-  selectedMode,
-  onModeChange,
-  selectedModel,
-  onModelChange,
+  onStarterClick,
 }: ChatWelcomeScreenProps) {
   return (
     <div className="flex h-full flex-col items-center justify-center px-4 md:px-8">
@@ -46,10 +26,10 @@ export function ChatWelcomeScreen({
 
         <div className="space-y-4 text-center">
           <h1 className="text-2xl font-semibold tracking-tight">
-            Hey! I&apos;m Square.ai
+            {WELCOME_TITLE}
           </h1>
           <p className="text-2xl text-foreground">
-            Tell me everything you need
+            {WELCOME_SUBTITLE}
           </p>
         </div>
 
@@ -57,34 +37,25 @@ export function ChatWelcomeScreen({
           message={message}
           onMessageChange={onMessageChange}
           onSend={onSend}
-          selectedModel={selectedModel}
-          onModelChange={onModelChange}
-          showTools={true}
         />
 
-        <div className="flex flex-wrap items-center justify-center gap-2">
-          {chatModes.map((mode) => (
-            <Button
-              key={mode.id}
-              variant={selectedMode === mode.id ? "secondary" : "ghost"}
-              className={cn("gap-2", selectedMode === mode.id && "bg-accent")}
-              onClick={() => onModeChange(mode.id)}
+        <div className="grid gap-2 sm:grid-cols-2">
+          {STARTER_QUESTIONS.map((question) => (
+            <button
+              key={question}
+              type="button"
+              onClick={() => onStarterClick(question)}
+              className="rounded-xl border border-border bg-card p-3 text-left text-sm text-foreground transition-colors hover:bg-accent"
             >
-              <mode.icon className="size-4" />
-              <span>{mode.label}</span>
-              {mode.pro && (
-                <span className="rounded bg-primary/10 px-1.5 py-0.5 text-xs font-medium">
-                  Pro
-                </span>
-              )}
-            </Button>
+              {question}
+            </button>
           ))}
         </div>
       </div>
 
       <div className="absolute bottom-6 text-center">
         <p className="text-sm text-muted-foreground">
-          Square AI can make mistakes. Check important info.
+          {APP_NAME} can make mistakes. Check important info.
         </p>
       </div>
     </div>

@@ -24,8 +24,6 @@ export function ChatMain() {
   const setActive = useChatStore((s) => s.setActive);
 
   const [message, setMessage] = useState("");
-  const [selectedMode, setSelectedMode] = useState("fast");
-  const [selectedModel, setSelectedModel] = useState("square-3");
 
   const send = (content: string) => {
     const text = content.trim();
@@ -82,10 +80,7 @@ export function ChatMain() {
       message={message}
       onMessageChange={setMessage}
       onSend={() => send(message)}
-      selectedMode={selectedMode}
-      onModeChange={setSelectedMode}
-      selectedModel={selectedModel}
-      onModelChange={setSelectedModel}
+      onStarterClick={send}
     />
   );
 }

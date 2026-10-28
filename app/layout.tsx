@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
+import { APP_NAME, MANUAL_NAME } from "@/lib/brand";
 
 export const metadata: Metadata = {
-  title: "Square AI - Chat Interface",
-  description: "A modern AI chat interface built with Next.js and shadcn/ui",
+  title: APP_NAME,
+  description: `Answers for branch staff, grounded in the ${MANUAL_NAME}.`,
 };
 
 export default function RootLayout({

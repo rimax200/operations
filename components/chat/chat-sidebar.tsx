@@ -9,7 +9,6 @@ import {
   PlusIcon,
   XIcon,
   MessageCircleDashedIcon,
-  WandSparklesIcon,
   MoreVerticalIcon,
   PencilIcon,
   Trash2Icon,
@@ -30,6 +29,7 @@ import {
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import type { Conversation } from "@/mock-data/chats";
+import { APP_NAME, MANUAL_SHORT } from "@/lib/brand";
 
 const navItems = [
   { href: "/", label: "New chat", icon: PlusIcon, active: () => false },
@@ -180,8 +180,8 @@ export function ChatSidebar({
         <div className="flex w-full items-center gap-2.5 px-2 h-10">
           <Logo className="size-6" />
           <div className="flex min-w-0 flex-col leading-tight">
-            <span className="font-semibold text-sm">Ops Assistant</span>
-            <span className="text-xs text-muted-foreground truncate">Manual v{manualVersion}</span>
+            <span className="font-semibold text-sm">{APP_NAME}</span>
+            <span className="text-xs text-muted-foreground truncate">{MANUAL_SHORT} v{manualVersion}</span>
           </div>
         </div>
       </div>
@@ -279,38 +279,6 @@ export function ChatSidebar({
           </Button>
         )}
         <p className="px-2 text-xs text-muted-foreground">Chats are saved only on this device.</p>
-      </div>
-
-      <div className="p-5 border-t border-sidebar-border">
-        <div className="rounded-lg bg-linear-to-br from-purple-500/10 via-blue-500/10 to-pink-500/10 p-3.5 space-y-3">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <WandSparklesIcon className="size-4" />
-              <span className="text-sm font-semibold">Square UI</span>
-            </div>
-            <p className="text-xs text-muted-foreground leading-tight">
-              Collection of beautifully crafted open-source layouts UI built
-              with shadcn/ui.
-            </p>
-          </div>
-          <Button
-            size="sm"
-            nativeButton={false}
-            className="relative w-fit h-[30px] px-3 overflow-hidden bg-white text-black hover:bg-white/90 shadow-[0px_1px_2px_0px_rgba(8,8,8,0.2),0px_4px_4px_0px_rgba(8,8,8,0.08),inset_0px_1px_1px_0px_rgba(255,255,255,0.2),inset_0px_6px_12px_0px_rgba(255,255,255,0.12)]"
-            render={
-              <Link
-                href="https://square.lndevui.com"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(205,175,250,1),transparent_50%),radial-gradient(ellipse_at_bottom_right,rgba(129,169,248,1),transparent_50%),radial-gradient(ellipse_at_top_left,rgba(247,203,191,1),transparent_50%),radial-gradient(ellipse_at_bottom_left,rgba(164,252,245,1),transparent_50%)]" />
-                <span className="relative z-10 font-medium text-xs">
-                  square.lndevui.com
-                </span>
-              </Link>
-            }
-          />
-        </div>
       </div>
     </div>
   );

@@ -1,4 +1,5 @@
 import { callGroq } from "@/lib/groq";
+import { MANUAL_NAME, MANUAL_SHORT, ORG_NAME } from "@/lib/brand";
 import { buildQuery, closestTopics, popularTopics, search, type ScoredChunk } from "@/lib/retrieve";
 
 export const runtime = "nodejs";
@@ -11,7 +12,7 @@ const REWRITE_TIMEOUT_MS = 5_000;
 const SMALL_TALK =
   /^\s*(hi|hello|hey|hiya|good\s+(morning|afternoon|evening)|thanks|thank\s+you|thank\s+u|thx|ok|okay|bye|goodbye)(\s+(there|team|please|so\s+much|a\s+lot))?\s*[!.,]*\s*$/i;
 
-const SYSTEM_PROMPT = `You are a friendly, sharp senior colleague helping a bank branch staff member who is in the middle of a conversation with a customer. You answer from the bank's operations manual excerpts provided in each user message.
+const SYSTEM_PROMPT = `You are a friendly, sharp branch operations assistant for ${ORG_NAME}'s ${MANUAL_SHORT} (${MANUAL_NAME}), like a senior colleague helping a bank branch staff member who is in the middle of a conversation with a customer. You answer from the ${MANUAL_SHORT} excerpts provided in each user message.
 
 Tone and style:
 - Warm, direct and short. Start with the answer itself, never with "Based on the manual" or similar.
@@ -113,8 +114,8 @@ export async function POST(request: Request) {
     const thanks = /thank|thx|bye/i.test(latest);
     return Response.json({
       answer: thanks
-        ? "You're welcome! Ask me anything else from the operations manual. Here are some things I can help with:"
-        : "Hello! I can help you with procedures from the operations manual while you're serving a customer. You could try:",
+        ? `You're welcome! Ask me anything else from the ${MANUAL_SHORT}. Here are some things I can help with:`
+        : `Hello! I'm here to help you find procedures in the ${MANUAL_SHORT} while you're serving a customer. You could try:`,
       sources: [],
       grounded: false,
       suggestions: popularTopics(),

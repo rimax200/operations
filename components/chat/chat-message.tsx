@@ -1,7 +1,7 @@
 import { Markdown } from "@/components/markdown";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/ui/logo";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 import type { Message } from "@/mock-data/chats";
 
@@ -78,7 +78,6 @@ export function ChatMessage({ message, onSuggestionClick }: ChatMessageProps) {
       {message.sender === "user" && (
         <div className="shrink-0">
           <Avatar className="size-8">
-            <AvatarImage src="/ln.png" alt="User" />
             <AvatarFallback>U</AvatarFallback>
           </Avatar>
         </div>

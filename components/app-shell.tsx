@@ -2,29 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
-import Link from "next/link";
 import { ChatSidebar } from "@/components/chat/chat-sidebar";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
-import { Button, buttonVariants } from "@/components/ui/button";
-import { MenuIcon, Github } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { MenuIcon } from "lucide-react";
 import { useChatStore } from "@/store/chat-store";
-
-const REPO_URL = "https://github.com/ln-dev7/square-ui/tree/master/templates/chat";
-
-function GithubLink() {
-  return (
-    <Link
-      href={REPO_URL}
-      target="_blank"
-      rel="noopener noreferrer"
-      aria-label="Source on GitHub"
-      className={buttonVariants({ variant: "ghost", size: "icon-sm" })}
-    >
-      <Github className="size-4" />
-    </Link>
-  );
-}
 
 export function AppShell({ manualVersion, children }: { manualVersion: string; children: React.ReactNode }) {
   const pathname = usePathname();
@@ -56,14 +39,10 @@ export function AppShell({ manualVersion, children }: { manualVersion: string; c
             <MenuIcon className="size-5" />
           </Button>
 
-          <div className="flex items-center gap-2">
-            <GithubLink />
-            <ThemeToggle />
-          </div>
+          <ThemeToggle />
         </div>
 
         <div className="hidden md:flex absolute top-4 right-4 gap-2 z-20">
-          <GithubLink />
           <ThemeToggle />
         </div>
 
