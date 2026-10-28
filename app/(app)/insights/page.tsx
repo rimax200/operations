@@ -52,6 +52,9 @@ function Kpi({ label, value, hint }: { label: string; value: string; hint?: Reac
 }
 
 export default async function InsightsPage({ searchParams }: { searchParams: Promise<{ [key: string]: string | string[] | undefined }> }) {
+  // Reading cookies first makes this page dynamic. Without it, a build with no passcode set would
+  // prerender the "not enabled" message and serve it forever, even after INSIGHTS_PASSCODE is set.
+  const cookieStore = await cookies();
   const passcode = getPasscode();
   if (!passcode) {
     return (
@@ -70,7 +73,6 @@ export default async function InsightsPage({ searchParams }: { searchParams: Pro
     );
   }
 
-  const cookieStore = await cookies();
   if (!verifySessionToken(cookieStore.get(SESSION_COOKIE)?.value, passcode)) return <LoginForm />;
 
   // Everything below runs on the server; only finished numbers reach the browser.
