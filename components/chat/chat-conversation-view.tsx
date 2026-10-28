@@ -11,6 +11,7 @@ interface ChatConversationViewProps {
   onMessageChange: (value: string) => void;
   onSend: (content: string) => void;
   onReset: () => void;
+  onRetry: () => void;
 }
 
 export function ChatConversationView({
@@ -20,6 +21,7 @@ export function ChatConversationView({
   onMessageChange,
   onSend,
   onReset,
+  onRetry,
 }: ChatConversationViewProps) {
   return (
     <div className="flex h-full flex-col">
@@ -35,11 +37,12 @@ export function ChatConversationView({
               <XIcon className="size-4" />
             </Button>
           </div>
-          {messages.map((msg) => (
+          {messages.map((msg, index) => (
             <ChatMessage
               key={msg.id}
               message={msg}
               onSuggestionClick={(topic) => !isLoading && onSend(topic)}
+              onRetry={index === messages.length - 1 && !isLoading ? onRetry : undefined}
             />
           ))}
           {isLoading && (

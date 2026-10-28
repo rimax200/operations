@@ -22,6 +22,7 @@ export function ChatMain() {
   const createConversation = useChatStore((s) => s.createConversation);
   const addMessage = useChatStore((s) => s.addMessage);
   const setActive = useChatStore((s) => s.setActive);
+  const removeMessage = useChatStore((s) => s.removeMessage);
 
   const [message, setMessage] = useState("");
 
@@ -39,6 +40,15 @@ export function ChatMain() {
     }
     setMessage("");
     void requestReply(id);
+  };
+
+  // "Try again" on a rate-limited error: drop the error bubble and resend the last question once.
+  const retry = () => {
+    if (!conversation || isLoading) return;
+    const last = conversation.messages[conversation.messages.length - 1];
+    if (!last?.isError) return;
+    removeMessage(conversation.id, last.id);
+    void requestReply(conversation.id);
   };
 
   // An unknown conversation id goes back to a fresh chat.
@@ -71,6 +81,7 @@ export function ChatMain() {
         onMessageChange={setMessage}
         onSend={send}
         onReset={() => router.push("/")}
+        onRetry={retry}
       />
     );
   }

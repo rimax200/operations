@@ -3,6 +3,7 @@ import type { Message } from "@/mock-data/chats";
 
 // The latest message plus the last 4 turns before it.
 const CONTEXT_MESSAGES = 5;
+const REQUEST_TIMEOUT_MS = 30_000;
 
 export function makeMessage(partial: Omit<Message, "id" | "timestamp">): Message {
   return { id: crypto.randomUUID(), timestamp: Date.now(), ...partial };
@@ -17,34 +18,51 @@ export async function requestReply(conversationId: string) {
   if (!conversation) return;
 
   setPending(conversationId, true);
-  let reply: Message;
   try {
-    const res = await fetch("/api/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        messages: conversation.messages
-          .filter((m) => !m.isError)
-          .slice(-CONTEXT_MESSAGES)
-          .map((m) => ({ role: m.sender === "user" ? "user" : "assistant", content: m.content })),
-      }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data?.error ?? "Something went wrong.");
-    reply = makeMessage({
-      content: data.answer,
-      sender: "ai",
-      sources: data.sources,
-      grounded: data.grounded,
-      suggestions: data.suggestions,
-    });
-  } catch (err) {
-    reply = makeMessage({
-      content: err instanceof Error ? err.message : "Something went wrong. Please try again.",
-      sender: "ai",
-      isError: true,
-    });
+    let reply: Message;
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        // Never wait forever: a stuck request would leave the loading bubble up.
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        body: JSON.stringify({
+          messages: conversation.messages
+            .filter((m) => !m.isError)
+            .slice(-CONTEXT_MESSAGES)
+            .map((m) => ({ role: m.sender === "user" ? "user" : "assistant", content: m.content })),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        reply = makeMessage({
+          content: data?.error ?? "Something went wrong.",
+          sender: "ai",
+          isError: true,
+          retryable: data?.busy === true,
+        });
+      } else {
+        reply = makeMessage({
+          content: data.answer,
+          sender: "ai",
+          sources: data.sources,
+          grounded: data.grounded,
+          suggestions: data.suggestions,
+          cached: data.cached === true,
+        });
+      }
+    } catch (err) {
+      const timedOut = err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError");
+      reply = makeMessage({
+        content: timedOut
+          ? "The assistant took too long to respond. Please try again."
+          : "Something went wrong. Please try again.",
+        sender: "ai",
+        isError: true,
+      });
+    }
+    addMessage(conversationId, reply);
+  } finally {
+    setPending(conversationId, false);
   }
-  addMessage(conversationId, reply);
-  setPending(conversationId, false);
 }

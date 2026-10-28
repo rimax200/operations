@@ -1,3 +1,4 @@
+import { cacheKey, LruCache } from "@/lib/cache";
 import { callGroq } from "@/lib/groq";
 import { MANUAL_NAME, MANUAL_SHORT, ORG_NAME } from "@/lib/brand";
 import { buildQuery, closestTopics, popularTopics, search, type ScoredChunk } from "@/lib/retrieve";
@@ -6,6 +7,8 @@ export const runtime = "nodejs";
 
 const DEFAULT_MODEL = "openai/gpt-oss-120b";
 const DEFAULT_REWRITE_MODEL = "openai/gpt-oss-20b";
+const TOP_CHUNKS = 3;
+const MAX_CHUNK_CHARS = 1500;
 const ANSWER_TIMEOUT_MS = 10_000;
 const REWRITE_TIMEOUT_MS = 5_000;
 
@@ -45,6 +48,21 @@ interface ChatResponse {
   sources: { id: string; title: string; category: string }[];
   grounded: boolean;
   suggestions?: string[];
+  cached?: boolean;
+}
+
+// Only grounded answers and NOT_IN_MANUAL fallbacks are cached; errors never are.
+const answerCache = new LruCache<ChatResponse>();
+
+function busy(retryAfterSeconds: number) {
+  return Response.json(
+    {
+      error: "The assistant is busy right now. Please try again in a moment.",
+      busy: true,
+      retryAfterSeconds,
+    },
+    { status: 429 },
+  );
 }
 
 function parseMessages(body: unknown): ChatMessage[] | null {
@@ -133,8 +151,17 @@ export async function POST(request: Request) {
   // 2. Normal retrieval.
   const query = buildQuery(messages.filter((m) => m.role === "user").map((m) => m.content));
   const t0 = performance.now();
-  let chunks = search(query, 4);
+  let chunks = search(query, TOP_CHUNKS);
   const retrievalMs = Math.round(performance.now() - t0);
+
+  // Cache lookup: same normalized question and same top sections => same answer, no LLM or rewrite call.
+  const key = cacheKey(latest, chunks.map((c) => c.id));
+  const hit = answerCache.get(key);
+  if (hit) {
+    console.log(`[chat] cache hit retrieval=${retrievalMs}ms llm=skipped total=${Math.round(performance.now() - t0)}ms`);
+    return Response.json({ ...hit, cached: true } satisfies ChatResponse);
+  }
+  console.log("[chat] cache miss");
 
   // 3. Weak retrieval: one cheap LLM call that rewrites the message into keywords.
   let rewriteMs: number | null = null;
@@ -150,13 +177,18 @@ export async function POST(request: Request) {
       timeoutMs: REWRITE_TIMEOUT_MS,
     });
     rewriteMs = rewrite.ms;
+    if (!rewrite.ok && rewrite.retryAfterSeconds !== undefined) return "busy" as const;
     if (rewrite.ok) {
       rewritten = rewrite.content.replace(/[^\p{L}\p{N}\s&-]/gu, " ").slice(0, 200);
-      return search(`${rewritten} ${query}`, 4);
+      return search(`${rewritten} ${query}`, TOP_CHUNKS);
     }
     return [];
   };
-  if (chunks.length === 0) chunks = await rewriteQuery();
+  if (chunks.length === 0) {
+    const rewrittenChunks = await rewriteQuery();
+    if (rewrittenChunks === "busy") return busy(30);
+    chunks = rewrittenChunks;
+  }
 
   // 4. Still nothing: conversational fallback without calling the answering LLM.
   if (chunks.length === 0) {
@@ -168,7 +200,7 @@ export async function POST(request: Request) {
 
   const answer = (found: ScoredChunk[]) => {
     const excerpts = found
-      .map((c, i) => `[${i + 1}] id: ${c.id} | ${c.title} (${c.category})\n${c.text}`)
+      .map((c, i) => `[${i + 1}] id: ${c.id} | ${c.title} (${c.category})\n${c.text.slice(0, MAX_CHUNK_CHARS)}`)
       .join("\n\n");
     const history = messages.slice(-5, -1).map((m) => ({ role: m.role, content: m.content }));
     return callGroq({
@@ -189,6 +221,7 @@ export async function POST(request: Request) {
   // excerpts don't answer it and we haven't rewritten yet, rewrite once and retry.
   if (llm.ok && llm.content.includes("NOT_IN_MANUAL") && rewriteMs === null) {
     const retry = await rewriteQuery();
+    if (retry === "busy") return busy(30);
     const known = new Set(chunks.map((c) => c.id));
     if (retry.some((c) => !known.has(c.id))) {
       chunks = retry;
@@ -199,21 +232,25 @@ export async function POST(request: Request) {
   console.log(
     `[chat] retrieval=${retrievalMs}ms rewrite=${rewriteMs ?? "skipped"}ms llm=${llmMs}ms rewritten="${rewritten}"`,
   );
+  if (llm.ok && llm.usage) console.log(`[chat] tokens prompt=${llm.usage.promptTokens} completion=${llm.usage.completionTokens}`);
 
   if (!llm.ok) {
+    if (llm.retryAfterSeconds !== undefined) return busy(llm.retryAfterSeconds);
     const message = llm.timedOut
       ? "The assistant took too long to respond. Please try again."
-      : llm.status === 429
-        ? "The assistant is busy right now. Please try again in a moment."
-        : "The assistant service had a problem. Please try again.";
-    return Response.json({ error: message }, { status: llm.timedOut ? 504 : llm.status === 429 ? 429 : 502 });
+      : "The assistant service had a problem. Please try again.";
+    return Response.json({ error: message }, { status: llm.timedOut ? 504 : 502 });
   }
 
   if (!llm.content || llm.content.includes("NOT_IN_MANUAL")) {
-    return Response.json(notFound(query));
+    const fallback = notFound(query);
+    answerCache.set(key, fallback);
+    return Response.json(fallback);
   }
 
   const { answer: text, sources } = extractUsed(llm.content, chunks);
   console.log(`[chat] USED line: ${llm.content.match(/USED:.*$/im)?.[0] ?? "(missing)"}`);
-  return Response.json({ answer: text, sources, grounded: true } satisfies ChatResponse);
+  const response: ChatResponse = { answer: text, sources, grounded: true };
+  answerCache.set(key, response);
+  return Response.json(response);
 }

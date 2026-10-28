@@ -13,7 +13,11 @@ export interface Message {
   sources?: MessageSource[];
   grounded?: boolean;
   suggestions?: string[];
+  /** Served from the answer cache, so it came back instantly. */
+  cached?: boolean;
   isError?: boolean;
+  /** Error bubble that offers a "Try again" button (rate limited). */
+  retryable?: boolean;
 }
 
 export interface Conversation {

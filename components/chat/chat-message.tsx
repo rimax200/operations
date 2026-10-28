@@ -1,4 +1,6 @@
+import { ZapIcon } from "lucide-react";
 import { Markdown } from "@/components/markdown";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/ui/logo";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -10,9 +12,11 @@ export type { Message };
 interface ChatMessageProps {
   message: Message;
   onSuggestionClick?: (topic: string) => void;
+  /** Set only on the latest message; shows "Try again" on a rate-limited error. */
+  onRetry?: () => void;
 }
 
-export function ChatMessage({ message, onSuggestionClick }: ChatMessageProps) {
+export function ChatMessage({ message, onSuggestionClick, onRetry }: ChatMessageProps) {
   return (
     <div
       className={cn(
@@ -58,6 +62,17 @@ export function ChatMessage({ message, onSuggestionClick }: ChatMessageProps) {
               </span>
             ))}
           </div>
+        )}
+        {message.cached && (
+          <p className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
+            <ZapIcon className="size-3" />
+            Answered instantly
+          </p>
+        )}
+        {message.isError && message.retryable && onRetry && (
+          <Button variant="secondary" size="sm" className="mt-3" onClick={onRetry}>
+            Try again
+          </Button>
         )}
         {message.suggestions && message.suggestions.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-1.5">

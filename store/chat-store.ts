@@ -16,6 +16,7 @@ interface ChatState {
   createConversation: (firstMessage: Message) => string;
   addMessage: (conversationId: string, message: Message) => void;
   updateMessage: (conversationId: string, messageId: string, patch: Partial<Message>) => void;
+  removeMessage: (conversationId: string, messageId: string) => void;
   renameConversation: (conversationId: string, title: string) => void;
   deleteConversation: (conversationId: string) => void;
   clearAll: () => void;
@@ -95,6 +96,13 @@ export const useChatStore = create<ChatState>()(
             c.id === conversationId
               ? { ...c, messages: c.messages.map((m) => (m.id === messageId ? { ...m, ...patch } : m)) }
               : c,
+          ),
+        })),
+
+      removeMessage: (conversationId, messageId) =>
+        set((state) => ({
+          conversations: state.conversations.map((c) =>
+            c.id === conversationId ? { ...c, messages: c.messages.filter((m) => m.id !== messageId) } : c,
           ),
         })),
 
