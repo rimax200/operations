@@ -13,7 +13,9 @@ export interface EventLogger {
 
 const LOG_DIR = path.join(process.cwd(), "data", "logs");
 
-// One JSON object per line. Needs a writable disk; serverless hosts usually don't have one.
+// One JSON object per line. Needs a writable disk. On Vercel (and other serverless hosts) the
+// filesystem is read-only or temporary, so this file log does not persist there; use a hosted
+// EventLogger in production.
 export class FileEventLogger implements EventLogger {
   private file: string;
   private dir: string;
@@ -28,16 +30,13 @@ export class FileEventLogger implements EventLogger {
     await appendFile(this.file, `${JSON.stringify(event)}\n`, "utf8");
   }
 
-  // A missing file is an empty log; malformed lines are skipped.
+  // A missing or unreadable file is an empty log; malformed lines are skipped.
   async readEvents(options: { since?: Date } = {}) {
-    let text: string;
     try {
-      text = await readFile(this.file, "utf8");
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
-      throw err;
+      return parseEvents(await readFile(this.file, "utf8"), options.since);
+    } catch {
+      return [];
     }
-    return parseEvents(text, options.since);
   }
 }
 
@@ -47,9 +46,13 @@ export function setEventLogger(next: EventLogger) {
   logger = next;
 }
 
-/** Reads real usage events from the active logger. */
-export function readEvents(options?: { since?: Date }) {
-  return logger.readEvents(options);
+/** Reads real usage events from the active logger; returns [] if they can't be read. */
+export async function readEvents(options?: { since?: Date }): Promise<StoredEvent[]> {
+  try {
+    return await logger.readEvents(options);
+  } catch {
+    return [];
+  }
 }
 
 // Synthetic events written by scripts/seed-demo.mjs. Kept in a separate file so demo data never
@@ -58,7 +61,8 @@ export const demoEventLogger = new FileEventLogger(LOG_DIR, "demo-events.jsonl")
 
 const MAX_QUESTION_CHARS = 500;
 
-// Logging must never break a request: failures are reported to the console and swallowed.
+// Logging must never break a request, even on a read-only filesystem (failed mkdir or append):
+// every failure is reported to the console and swallowed.
 export async function logEvent(event: LogEvent): Promise<void> {
   try {
     await logger.write({

@@ -44,3 +44,4 @@ next-env.d.ts
 
 # request/feedback logs
 /data/logs/
+/data/private/
