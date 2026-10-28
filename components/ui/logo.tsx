@@ -5,10 +5,10 @@ import { APP_NAME } from "@/lib/brand";
 export function Logo({ className }: { className?: string }) {
   return (
     <Image
-      src="/images/logo.jpg"
+      src="/images/logo.png"
       alt={APP_NAME}
-      width={512}
-      height={512}
+      width={444}
+      height={383}
       priority
       className={cn("max-w-none shrink-0 object-contain", className)}
     />
