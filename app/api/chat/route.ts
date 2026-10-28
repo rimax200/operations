@@ -53,6 +53,7 @@ interface ChatResponse {
   fallback?: boolean;
   cached?: boolean;
   timings?: { retrievalMs: number | null; rewriteMs: number | null; llmMs: number | null };
+  messageId?: string;
 }
 
 // Only grounded answers and NOT_IN_MANUAL fallbacks are cached; errors never are.
@@ -124,6 +125,10 @@ export async function POST(request: Request) {
   const rawId = (body as { conversationId?: unknown }).conversationId;
   const conversationId = typeof rawId === "string" && rawId.length <= 64 ? rawId : "unknown";
 
+  // Each answer gets an id the client reuses for its message, so a later thumbs up/down can be
+  // joined back to this question event.
+  const messageId = crypto.randomUUID();
+
   type Timings = NonNullable<ChatResponse["timings"]>;
   const noTimings: Timings = { retrievalMs: null, rewriteMs: null, llmMs: null };
 
@@ -137,9 +142,10 @@ export async function POST(request: Request) {
       fallback: response.fallback === true,
       sources: response.sources.map((source) => source.title),
       cached: response.cached === true,
+      messageId,
       ...timings,
     });
-    return Response.json({ ...response, timings });
+    return Response.json({ ...response, timings, messageId });
   };
   const fail = (error: string, status: number, extra: object = {}, timings: Timings = noTimings) => {
     void logEvent({
@@ -151,6 +157,7 @@ export async function POST(request: Request) {
       sources: [],
       cached: false,
       error: true,
+      messageId,
       ...timings,
     });
     return Response.json({ error, ...extra }, { status });

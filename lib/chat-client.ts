@@ -5,8 +5,8 @@ import type { Message } from "@/mock-data/chats";
 const CONTEXT_MESSAGES = 5;
 const REQUEST_TIMEOUT_MS = 30_000;
 
-export function makeMessage(partial: Omit<Message, "id" | "timestamp">): Message {
-  return { id: crypto.randomUUID(), timestamp: Date.now(), ...partial };
+export function makeMessage(partial: Omit<Message, "id" | "timestamp"> & { id?: string }): Message {
+  return { ...partial, id: partial.id ?? crypto.randomUUID(), timestamp: Date.now() };
 }
 
 // Asks the assistant about a conversation's latest message and saves the reply (or an error
@@ -44,6 +44,7 @@ export async function requestReply(conversationId: string) {
         });
       } else {
         reply = makeMessage({
+          id: typeof data.messageId === "string" ? data.messageId : undefined,
           content: data.answer,
           sender: "ai",
           sources: data.sources,
