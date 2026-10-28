@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { ChatSidebar } from "@/components/chat/chat-sidebar";
@@ -8,6 +8,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { MenuIcon, Github } from "lucide-react";
+import { useChatStore } from "@/store/chat-store";
 
 const REPO_URL = "https://github.com/ln-dev7/square-ui/tree/master/templates/chat";
 
@@ -25,22 +26,27 @@ function GithubLink() {
   );
 }
 
-export function AppShell({ children }: { children: React.ReactNode }) {
+export function AppShell({ manualVersion, children }: { manualVersion: string; children: React.ReactNode }) {
   const pathname = usePathname();
   // Remember which page the mobile sidebar was opened on, so navigating closes it.
   const [openOn, setOpenOn] = useState<string | null>(null);
   const sidebarOpen = openOn === pathname;
   const setSidebarOpen = (open: boolean) => setOpenOn(open ? pathname : null);
 
+  // Saved chats are read after mount so the server HTML and the first client render match.
+  useEffect(() => {
+    void useChatStore.persist.rehydrate();
+  }, []);
+
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       <div className="hidden md:block w-64 border-r border-border">
-        <ChatSidebar />
+        <ChatSidebar manualVersion={manualVersion} />
       </div>
 
       <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
         <SheetContent side="left" className="w-64 p-0 border-none [&>button]:hidden">
-          <ChatSidebar />
+          <ChatSidebar manualVersion={manualVersion} onNavigate={() => setSidebarOpen(false)} />
         </SheetContent>
       </Sheet>
 

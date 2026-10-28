@@ -1,109 +1,78 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ChatWelcomeScreen } from "./chat-welcome-screen";
-import type { Message } from "./chat-message";
 import { ChatConversationView } from "./chat-conversation-view";
+import { makeMessage, requestReply } from "@/lib/chat-client";
+import { useChatStore } from "@/store/chat-store";
 
 export function ChatMain() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  // "/" is a fresh chat; "/c/<id>" is a saved conversation.
+  const conversationId = pathname.startsWith("/c/") ? decodeURIComponent(pathname.split("/")[2] ?? "") : null;
+  const hasHydrated = useChatStore((s) => s.hasHydrated);
+  const conversation = useChatStore((s) =>
+    conversationId ? s.conversations.find((c) => c.id === conversationId) : undefined,
+  );
+  const isLoading = useChatStore((s) => conversationId !== null && s.pendingIds.includes(conversationId));
+  const createConversation = useChatStore((s) => s.createConversation);
+  const addMessage = useChatStore((s) => s.addMessage);
+  const setActive = useChatStore((s) => s.setActive);
+
   const [message, setMessage] = useState("");
   const [selectedMode, setSelectedMode] = useState("fast");
   const [selectedModel, setSelectedModel] = useState("square-3");
-  const [isConversationStarted, setIsConversationStarted] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const router = useRouter();
-  const searchParams = useSearchParams();
+
+  const send = (content: string) => {
+    const text = content.trim();
+    if (!text || isLoading) return;
+    const userMessage = makeMessage({ content: text, sender: "user" });
+    let id = conversation?.id;
+    if (id) {
+      addMessage(id, userMessage);
+    } else {
+      id = createConversation(userMessage);
+      // Give the conversation its own URL without a navigation, so this view keeps its state.
+      window.history.replaceState(null, "", `/c/${id}`);
+    }
+    setMessage("");
+    void requestReply(id);
+  };
+
+  // An unknown conversation id goes back to a fresh chat.
+  useEffect(() => {
+    if (hasHydrated && conversationId && !conversation) router.replace("/");
+  }, [hasHydrated, conversationId, conversation, router]);
+
+  useEffect(() => {
+    setActive(conversation?.id ?? null);
+  }, [conversation?.id, setActive]);
+
+  // "Ask AI about this" in the archive lands here as /?q=...; it starts a new conversation once.
   const prefill = searchParams.get("q");
   const prefillHandled = useRef(false);
-
-  const askAssistant = async (history: Message[]) => {
-    setMessages(history);
-    setMessage("");
-    setIsLoading(true);
-
-    let reply: Message;
-    try {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: history.map((m) => ({
-            role: m.sender === "user" ? "user" : "assistant",
-            content: m.content,
-          })),
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error ?? "Something went wrong.");
-      reply = {
-        id: `${Date.now()}-ai`,
-        content: data.answer,
-        sender: "ai",
-        timestamp: new Date(),
-        sources: data.sources,
-        grounded: data.grounded,
-        suggestions: data.suggestions,
-      };
-    } catch (err) {
-      reply = {
-        id: `${Date.now()}-error`,
-        content: err instanceof Error ? err.message : "Something went wrong. Please try again.",
-        sender: "ai",
-        timestamp: new Date(),
-        isError: true,
-      };
-    }
-    setMessages((prev) => [...prev, reply]);
-    setIsLoading(false);
-  };
-
-  const handleSend = () => {
-    if (!message.trim() || isLoading) return;
-
-    setIsConversationStarted(true);
-    askAssistant([
-      { id: `${Date.now()}-user`, content: message, sender: "user", timestamp: new Date() },
-    ]);
-  };
-
-  // "Ask AI about this" in the archive lands here as /?q=...; send it once, then clean the URL.
   useEffect(() => {
-    if (!prefill || prefillHandled.current) return;
+    if (!hasHydrated || !prefill || prefillHandled.current || conversationId) return;
     prefillHandled.current = true;
-    router.replace("/");
-    setIsConversationStarted(true);
-    askAssistant([
-      { id: `${Date.now()}-user`, content: prefill, sender: "user", timestamp: new Date() },
-    ]);
+    send(prefill);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [prefill]);
+  }, [hasHydrated, prefill]);
 
-  const handleReset = () => {
-    setIsConversationStarted(false);
-    setIsLoading(false);
-    setMessages([]);
-    setMessage("");
-  };
-
-  const handleSendMessage = (content: string) => {
-    if (isLoading) return;
-    askAssistant([
-      ...messages,
-      { id: `${Date.now()}-user`, content, sender: "user", timestamp: new Date() },
-    ]);
-  };
-
-  if (isConversationStarted) {
+  if (conversationId) {
+    // Nothing to show until saved chats are loaded; an unknown id is redirected above.
+    if (!conversation) return null;
     return (
       <ChatConversationView
-        messages={messages}
+        messages={conversation.messages}
         isLoading={isLoading}
         message={message}
         onMessageChange={setMessage}
-        onSend={handleSendMessage}
-        onReset={handleReset}
+        onSend={send}
+        onReset={() => router.push("/")}
       />
     );
   }
@@ -112,7 +81,7 @@ export function ChatMain() {
     <ChatWelcomeScreen
       message={message}
       onMessageChange={setMessage}
-      onSend={handleSend}
+      onSend={() => send(message)}
       selectedMode={selectedMode}
       onModeChange={setSelectedMode}
       selectedModel={selectedModel}

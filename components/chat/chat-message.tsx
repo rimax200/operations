@@ -3,18 +3,9 @@ import { cn } from "@/lib/utils";
 import { Logo } from "@/components/ui/logo";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
-import type { MessageSource } from "@/mock-data/chats";
+import type { Message } from "@/mock-data/chats";
 
-export interface Message {
-  id: string;
-  content: string;
-  sender: "user" | "ai";
-  timestamp: Date;
-  sources?: MessageSource[];
-  grounded?: boolean;
-  suggestions?: string[];
-  isError?: boolean;
-}
+export type { Message };
 
 interface ChatMessageProps {
   message: Message;
